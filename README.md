@@ -4,6 +4,8 @@ This repository contains a collection of robotics projects focused on autonomous
 
 The projects were developed on Duckietown-based robots and explore how perception, planning, and motion estimation interact in real robotic systems operating under noisy and incomplete observations.
 
+~ Node Codes can be found under the "packages" folder of each project
+
 ---
 
 # 📚 Projects
