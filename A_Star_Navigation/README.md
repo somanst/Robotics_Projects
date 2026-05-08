@@ -1,47 +1,24 @@
-# Template: template-ros
+# 🧭 A* Autonomous Navigation
 
-This template provides a boilerplate repository
-for developing ROS-based software in Duckietown.
+![til](../Visuals/AStarDemo.gif)
 
-**NOTE:** If you want to develop software that does not use
-ROS, check out [this template](https://github.com/duckietown/template-basic).
+This project implements a complete autonomous navigation pipeline for a differential-drive robot using graph-based path planning and real-time localization.
 
+A map of the environment is given and modeled as a weighted graph where intersections are represented as nodes and traversable connections are represented as edges with associated traversal costs. The robot computes the shortest path between a start node and a goal node using the A* search algorithm, then continuously tracks and follows the generated trajectory in real time.
 
-## How to use it
+Localization is performed using ArUco marker pose estimation combined with wheel encoder odometry. Whenever visual landmarks are visible, the robot estimates its global pose using camera observations and coordinate frame transformations. When visual feedback is temporarily lost, the system falls back to odometry-based motion prediction until visual localization becomes available again. If the robot loses the tags for a long time, meaning odometry drift is continuously increasing, the system temporarily stops navigation and actively searches for nearby landmarks by rotating in place until localization is recovered.
 
-### 1. Fork this repository
+The navigation controller continuously rotates the robot toward the next target waypoint, aligns its heading, and applies differential-drive velocity commands to move toward the goal while correcting orientation errors in real time.
 
-Use the fork button in the top-right corner of the github page to fork this template repository.
+The system also includes a live top-down visualization interface displaying:
+- the robot pose
+- heading direction
+- planned path
+- graph nodes
+- localization state
+- map structure
 
+🎥 Full Demonstration Video:
+https://www.youtube.com/watch?v=maETFS25uTY
 
-### 2. Create a new repository
-
-Create a new repository on github.com while
-specifying the newly forked template repository as
-a template for your new repository.
-
-
-### 3. Define dependencies
-
-List the dependencies in the files `dependencies-apt.txt` and
-`dependencies-py3.txt` (apt packages and pip packages respectively).
-
-
-### 4. Place your code
-
-Place your code in the directory `/packages/` of
-your new repository.
-
-
-### 5. Setup launchers
-
-The directory `/launchers` can contain as many launchers (launching scripts)
-as you want. A default launcher called `default.sh` must always be present.
-
-If you create an executable script (i.e., a file with a valid shebang statement)
-a launcher will be created for it. For example, the script file 
-`/launchers/my-launcher.sh` will be available inside the Docker image as the binary
-`dt-launcher-my-launcher`.
-
-When launching a new container, you can simply provide `dt-launcher-my-launcher` as
-command.
+[View Project Folder](./A_Star_Navigation)

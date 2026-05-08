@@ -1,47 +1,16 @@
-# Template: template-ros
+# 📍 Visual Localization with ArUco and Odometry Fusion
 
-This template provides a boilerplate repository
-for developing ROS-based software in Duckietown.
+This project focuses on robot localization using visual landmark observations and wheel encoder odometry.
 
-**NOTE:** If you want to develop software that does not use
-ROS, check out [this template](https://github.com/duckietown/template-basic).
+The system detects ArUco markers in real time using OpenCV and estimates their relative pose with respect to the onboard camera. These observations are transformed into the world frame to estimate the robot position and orientation within the environment.
 
+To improve robustness, wheel odometry is fused with visual observations so the robot can continue estimating its motion even when landmarks are temporarily outside the camera field of view.
 
-## How to use it
+The project explores practical robotics challenges such as:
+- noisy visual observations
+- coordinate frame transformations
+- orientation estimation
+- intermittent sensing
+- differential-drive motion estimation
 
-### 1. Fork this repository
-
-Use the fork button in the top-right corner of the github page to fork this template repository.
-
-
-### 2. Create a new repository
-
-Create a new repository on github.com while
-specifying the newly forked template repository as
-a template for your new repository.
-
-
-### 3. Define dependencies
-
-List the dependencies in the files `dependencies-apt.txt` and
-`dependencies-py3.txt` (apt packages and pip packages respectively).
-
-
-### 4. Place your code
-
-Place your code in the directory `/packages/` of
-your new repository.
-
-
-### 5. Setup launchers
-
-The directory `/launchers` can contain as many launchers (launching scripts)
-as you want. A default launcher called `default.sh` must always be present.
-
-If you create an executable script (i.e., a file with a valid shebang statement)
-a launcher will be created for it. For example, the script file 
-`/launchers/my-launcher.sh` will be available inside the Docker image as the binary
-`dt-launcher-my-launcher`.
-
-When launching a new container, you can simply provide `dt-launcher-my-launcher` as
-command.
+A live visualization interface displays the robot trajectory and orientation on a dynamically updated top-down map.
