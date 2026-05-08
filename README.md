@@ -32,7 +32,7 @@ The system also includes a live top-down visualization interface displaying:
 - localization state
 - map structure
 
-[![Watch the demo](https://img.youtube.com/vi/dZ9cgghTU_8/0.jpg)](https://www.youtube.com/watch?v=maETFS25uTY)
+[![Watch the demo](https://img.youtube.com/vi/maETFS25uTY/0.jpg)](https://www.youtube.com/watch?v=maETFS25uTY)
 
 [View Project Folder](./A_Star_Navigation)
 
