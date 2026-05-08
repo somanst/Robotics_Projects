@@ -16,7 +16,7 @@ The projects were developed on Duckietown-based robots and explore how perceptio
 
 # 🧭 A* Autonomous Navigation
 
-![A* Demo](VIsuals/AStarDemo.gif)
+![til](VIsuals/AStarDemo.gif)
 
 This project implements a complete autonomous navigation pipeline for a differential-drive robot using graph-based path planning and real-time localization.
 
