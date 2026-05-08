@@ -1,0 +1,11 @@
+start_node: 0
+goal_node: 2
+max_v: 0.09
+max_w: 1.8
+angle_tolerance: 0.25
+node_reach_threshold: 0.22
+tag_timeout: 2.0
+
+search_rotate_seconds: 1.0
+search_stop_seconds: 0.5
+search_w: 1.5
