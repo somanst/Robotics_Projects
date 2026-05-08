@@ -20,5 +20,3 @@ The system also includes a live top-down visualization interface displaying:
 
 🎥 Full Demonstration Video:
 https://www.youtube.com/watch?v=maETFS25uTY
-
-[View Project Folder](./A_Star_Navigation)
