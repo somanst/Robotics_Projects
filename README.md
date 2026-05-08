@@ -16,6 +16,8 @@ The projects were developed on Duckietown-based robots and explore how perceptio
 
 # 🧭 A* Autonomous Navigation
 
+![A* Demo](VIsuals/AStarDemo.gif)
+
 This project implements a complete autonomous navigation pipeline for a differential-drive robot using graph-based path planning and real-time localization.
 
 A map of the environment is given and modeled as a weighted graph where intersections are represented as nodes and traversable connections are represented as edges with associated traversal costs. The robot computes the shortest path between a start node and a goal node using the A* search algorithm, then continuously tracks and follows the generated trajectory in real time.
@@ -32,7 +34,8 @@ The system also includes a live top-down visualization interface displaying:
 - localization state
 - map structure
 
-[![Watch the demo](https://img.youtube.com/vi/maETFS25uTY/0.jpg)](https://www.youtube.com/watch?v=maETFS25uTY)
+🎥 Full Demonstration Video:
+https://www.youtube.com/watch?v=maETFS25uTY
 
 [View Project Folder](./A_Star_Navigation)
 
