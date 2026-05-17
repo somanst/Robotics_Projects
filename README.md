@@ -8,6 +8,13 @@ The projects were developed on Duckietown-based robots and explore how perceptio
 
 ---
 
+# 👨‍💻 Credits
+
+Developed and maintained by Adam Sattout  
+AI Engineering Student @ Hacettepe University
+
+---
+
 # 📚 Projects
 
 - [🧭 A* Autonomous Navigation](#-a-autonomous-navigation)
