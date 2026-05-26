@@ -1,47 +1,32 @@
-# Template: template-ros
+# 🚗 Dynamic Window Approach (DWA) Local Navigation
 
-This template provides a boilerplate repository
-for developing ROS-based software in Duckietown.
+![til](../Visuals/dwa.jpeg)
 
-**NOTE:** If you want to develop software that does not use
-ROS, check out [this template](https://github.com/duckietown/template-basic).
+This project implements a Dynamic Window Approach (DWA) local planner for autonomous obstacle avoidance and motion control in a differential-drive robot.
 
+The system combines global path planning with real-time local trajectory optimization. A global path is first generated using A* search on an occupancy grid, while DWA continuously evaluates candidate velocity commands to safely guide the robot toward the goal while avoiding nearby obstacles.
 
-## How to use it
+At each control cycle, the robot samples multiple linear and angular velocity combinations and predicts their future trajectories over a finite planning horizon. Each candidate trajectory is evaluated according to several criteria including:
 
-### 1. Fork this repository
+- distance to the goal
+- proximity to the global A* path
+- waypoint tracking accuracy
+- heading alignment
+- obstacle clearance
+- forward motion preference
 
-Use the fork button in the top-right corner of the github page to fork this template repository.
+The planner supports both known static obstacles and dynamically detected obstacles using onboard Time-of-Flight sensing. Newly detected obstacles are transformed into the world frame and integrated into the navigation process in real time, allowing the robot to react to unexpected environmental changes.
 
+If no safe forward trajectory exists, the system executes a recovery behavior by temporarily reversing and steering away from the obstacle until a valid path becomes available again.
 
-### 2. Create a new repository
+The project includes a live visualization interface displaying:
 
-Create a new repository on github.com while
-specifying the newly forked template repository as
-a template for your new repository.
+- occupancy grid
+- global A* path
+- static and dynamic obstacles
+- sampled DWA trajectories
+- selected optimal trajectory
+- robot pose and heading
+- navigation progress
 
-
-### 3. Define dependencies
-
-List the dependencies in the files `dependencies-apt.txt` and
-`dependencies-py3.txt` (apt packages and pip packages respectively).
-
-
-### 4. Place your code
-
-Place your code in the directory `/packages/` of
-your new repository.
-
-
-### 5. Setup launchers
-
-The directory `/launchers` can contain as many launchers (launching scripts)
-as you want. A default launcher called `default.sh` must always be present.
-
-If you create an executable script (i.e., a file with a valid shebang statement)
-a launcher will be created for it. For example, the script file 
-`/launchers/my-launcher.sh` will be available inside the Docker image as the binary
-`dt-launcher-my-launcher`.
-
-When launching a new container, you can simply provide `dt-launcher-my-launcher` as
-command.
+The resulting system demonstrates how global planning and local reactive navigation can be combined to achieve robust autonomous motion under uncertainty and dynamic conditions.
