@@ -11,7 +11,9 @@ The projects were developed on Duckietown-based robots and explore how perceptio
 # 👨‍💻 Credits
 
 Developed and maintained by Adam Sattout
+
 Contributions by Yusuf Emir Cömert  
+
 AI Engineering Students @ Hacettepe University
 
 ---
