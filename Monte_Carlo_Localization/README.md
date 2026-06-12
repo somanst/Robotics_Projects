@@ -1,25 +1,17 @@
 # 🎯 Monte Carlo Localization
 
-<p align="center">
-  <strong>Particle-filter localization in environments with repeated and visually ambiguous landmarks.</strong>
-</p>
+Particle-filter localization in environments with repeated and visually ambiguous landmarks.
 
 <p align="center">
   <img src="../Visuals/MonteCarloDemo.gif" alt="Monte Carlo Localization Demo" width="850">
 </p>
 
-<p align="center">
-  <em>Particles gradually converge around the robot pose as odometry and repeated landmark observations are processed.</em>
-</p>
+*Particles gradually converge around the robot pose as odometry and repeated landmark observations are processed.*
 
-<p align="center">
-  ▶️ <a href="https://youtu.be/JwtKWX4133w"><strong>Watch the Monte Carlo Localization Demo on YouTube</strong></a>
-</p>
+## Project Resources
 
-<p align="center">
-  📄 <a href="../Visuals/monteCarloImplementation.pdf"><strong>View the Implementation Details Presentation</strong></a>
-</p>
-
+- 📄 [View the implementation details presentation](../Visuals/monteCarloImplementation.pdf)
+- ▶️ [Watch the demo on YouTube](https://youtu.be/JwtKWX4133w)
 
 ---
 
