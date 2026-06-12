@@ -1,4 +1,3 @@
-````markdown
 # 🎯 Monte Carlo Localization
 
 <p align="center">
@@ -11,6 +10,10 @@
 
 <p align="center">
   <em>Particles gradually converge around the robot pose as odometry and repeated landmark observations are processed.</em>
+</p>
+
+<p align="center">
+  ▶️ <a href="https://youtu.be/JwtKWX4133w"><strong>Watch the Monte Carlo Localization Demo on YouTube</strong></a>
 </p>
 
 <p align="center">
@@ -147,4 +150,3 @@ A typical localization sequence looks like this:
 ## Why This Project Matters
 
 This project demonstrates why probabilistic localization is useful when sensors are noisy and visual landmarks are not uniquely identifiable. Instead of immediately committing to a single answer, the robot maintains competing pose hypotheses and allows evidence to accumulate over time. As new motion and camera measurements arrive, the particle filter gradually identifies the most consistent estimate of the robot's location.
-````
