@@ -114,6 +114,8 @@ A live visualization interface displays the robot trajectory and orientation on 
 
 # 🎯 Monte Carlo Localization
 
+![til](Visuals/MonteCarloDemo.gif)
+
 This project implements Monte Carlo Localization (MCL) using a particle filter to estimate robot pose in ambiguous environments containing repeated visual landmarks.
 
 Instead of maintaining a single pose estimate, the system represents the robot belief as a distribution of particles spread across the environment. Each particle represents a possible robot pose hypothesis.
@@ -131,6 +133,9 @@ The project includes:
 - real-time particle visualization
 
 The resulting system demonstrates how probabilistic robotics techniques can localize a robot even under uncertainty, noisy measurements, and ambiguous landmark configurations.
+
+🎥 Full Demonstration Video:
+https://youtu.be/WHQ-gWjqnSM
 
 [View Project Folder](./Monte_Carlo_Localization)
 
