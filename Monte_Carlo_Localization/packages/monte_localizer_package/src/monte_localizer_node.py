@@ -22,10 +22,34 @@ L = 0.1     # wheelbase [m]
 N = 135     # encoder resolution [ticks]
 
 
+# ---------------------------------------------------------------------
+# Robot starting pose in world coordinates.
+# Set this to where the robot is physically placed when you start the
+# node. The odometry-only baseline starts here and integrates wheel
+# encoders from this pose. The particle filter does NOT use this; it
+# spawns particles uniformly across the map so it can still localize
+# from scratch.
+#
+# Current default: near the NE corner of the room, facing outward
+# (toward the NE corner) so the robot does not see any tag at startup
+# and the particle cloud stays uniformly random until the robot is
+# turned to look at tags.
+# ---------------------------------------------------------------------
+ROBOT_INITIAL_X = 0.85
+ROBOT_INITIAL_Y = 0.85
+ROBOT_INITIAL_THETA = np.pi / 4
+
+# ---------------------------------------------------------------------
+# How long (in seconds) trajectory lines stay visible on the top-down
+# map before fading out. Older points are pruned every frame so the
+# red (odometry) and green (filter estimate) trails do not pile up
+# during long runs and the visualization stays readable.
+# ---------------------------------------------------------------------
+TRAJECTORY_TRAIL_SECONDS = 15.0
+
+
 class CameraReaderNode(DTROS):
     def __init__(self, node_name):
-
-        
 
         super(CameraReaderNode, self).__init__(
             node_name=node_name,
@@ -36,7 +60,7 @@ class CameraReaderNode(DTROS):
         self._vehicle_name = os.environ['VEHICLE_NAME']
         self._camera_topic = f"/{self._vehicle_name}/camera_node/image/compressed"
         self._bridge = CvBridge()
-        
+
         self._window = "Monte Carlo Localizer"
         cv2.namedWindow(self._window, cv2.WINDOW_AUTOSIZE)
 
@@ -47,13 +71,16 @@ class CameraReaderNode(DTROS):
         self.scale = 800
 
         # screen margin
-        self.margin = 150
+        self.margin = 100
 
         # world origin on screen
-        self.origin_px = (self.map_w / 2, self.map_h / 2)
-        
+        # Bottom-left corner of the lab room maps to (margin, height - margin)
+        # in pixel coordinates. With scale=800, a 0.90 m room occupies 720 px
+        # and stays inside the 1000x1000 canvas with room to spare for labels.
+        self.origin_px = (self.margin, self.map_h - self.margin)
+
         self.base_map = np.zeros((1000, 1000, 3), dtype=np.uint8)
-        self.map_canvas = np.zeros((1000, 1000, 3), dtype=np.uint8) 
+        self.map_canvas = np.zeros((1000, 1000, 3), dtype=np.uint8)
         cv2.namedWindow("Top-Down Map", cv2.WINDOW_AUTOSIZE)
 
         self.sub = rospy.Subscriber(self._camera_topic, CompressedImage, self.callback)
@@ -82,14 +109,28 @@ class CameraReaderNode(DTROS):
         self._prev_ticks_left = None
         self._prev_ticks_right = None
 
-        grid_step = 0.25
-
+        # Lab tag map.
+        # Origin (0, 0) is at the bottom-left corner of the lab room.
+        # Room is approximately 0.90 m x 0.90 m.
+        # Tag theta = direction the tag's front face points, i.e. the normal
+        # vector pointing AWAY from the wall INTO the room. The filter uses
+        # this to predict the relative yaw a robot would observe for the tag.
         self.tagMap = {
-            #0:  np.array([0 * grid_step, 1 * grid_step, -np.pi / 2]),
-            #1:  np.array([1 * grid_step, 0 * grid_step, 0.0]),
-            2:  np.array([-1 * grid_step, 0 * grid_step, 0]),
-            3:  np.array([0 * grid_step, -1 * grid_step, 0]),
-            4:  np.array([0 * grid_step, 1 * grid_step, 0])
+            # ----- South wall (y = 0.00), tags face +y -----
+            0: np.array([0.33, 0.00,  np.pi / 2]),
+            1: np.array([0.50, 0.00,  np.pi / 2]),
+
+            # ----- East wall (x = 0.90), tags face -x -----
+            2: np.array([0.90, 0.25,  np.pi]),
+            3: np.array([0.90, 0.45,  np.pi]),
+
+            # ----- West wall (x = 0.00), tags face +x -----
+            4: np.array([0.00, 0.42,  0.0]),
+            5: np.array([0.00, 0.71,  0.0]),
+
+            # ----- North wall (y = 0.90), tags face -y -----
+            6: np.array([0.05, 0.90, -np.pi / 2]),
+            7: np.array([0.55, 0.90, -np.pi / 2]),
         }
         self.localizationState = False
         self.draw_fixed_tags()
@@ -104,6 +145,23 @@ class CameraReaderNode(DTROS):
         self.weights = []
         self.particleCount = 500
 
+        # Odometry-only pose (no filter correction).
+        # This pose is updated only from wheel encoders and never
+        # corrected by sensor observations. It is the baseline against
+        # which we compare the particle filter's estimate.
+        # Seeded from the manual ROBOT_INITIAL_* constants at the top
+        # of this file so the red trajectory starts at the robot's real
+        # physical placement.
+        self.odom_x = ROBOT_INITIAL_X
+        self.odom_y = ROBOT_INITIAL_Y
+        self.odom_theta = ROBOT_INITIAL_THETA
+
+        # Trajectory histories for visualization.
+        # odom_trajectory:     raw odometry path (drifts over time)
+        # estimate_trajectory: particle filter weighted-mean path
+        self.odom_trajectory = []
+        self.estimate_trajectory = []
+
         self.initializeParticles()
 
         self.draw_on_map()
@@ -111,7 +169,7 @@ class CameraReaderNode(DTROS):
     def world_to_pixel(self, x, y):
         px = int(self.origin_px[0] + x * self.scale)
         py = int(self.origin_px[1] - y * self.scale)
-        return px, py   
+        return px, py
 
     def draw_fixed_tags(self):
         self.base_map[:] = 0
@@ -132,27 +190,8 @@ class CameraReaderNode(DTROS):
             cv2.arrowedLine(self.base_map, (px, py), (epx, epy),
                             (255, 255, 0), 2, tipLength=0.3)
 
-    # def draw_on_map(self, x, y, theta):
-    #     self.map_canvas = self.base_map.copy()
-
-    #     px, py = self.world_to_pixel(x, y)
-
-    #     if 0 <= px < self.map_w and 0 <= py < self.map_h:
-    #         color = (0, 255, 0) if self.localizationState else (0, 0, 255)
-
-    #         cv2.circle(self.map_canvas, (px, py), 6, color, -1)
-
-    #         arrow_len_m = 0.10  # 10 cm arrow in world space
-    #         end_x = x + arrow_len_m * np.cos(theta)
-    #         end_y = y + arrow_len_m * np.sin(theta)
-    #         ex, ey = self.world_to_pixel(end_x, end_y)
-
-    #         cv2.arrowedLine(self.map_canvas, (px, py), (ex, ey), color, 2, tipLength=0.3)
-
-    #     cv2.imshow("Top-Down Map", self.map_canvas)
-
     def callback(self, msg):
-        self.latest_image = msg 
+        self.latest_image = msg
 
     def callback_left(self, data):
         self._ticks_left = data.data
@@ -168,7 +207,7 @@ class CameraReaderNode(DTROS):
         return (angle + np.pi) % (2*np.pi) - np.pi
 
     def detectMarkers(self, image):
-        arucoDict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_5X5_100)
+        arucoDict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
         arucoParams = cv2.aruco.DetectorParameters_create()
 
         arucoParams.adaptiveThreshWinSizeMin = 3
@@ -177,76 +216,39 @@ class CameraReaderNode(DTROS):
 
         (corners, ids, rejected) = cv2.aruco.detectMarkers(image, arucoDict, parameters=arucoParams)
         return corners, ids, rejected
-    
 
-    def getPose(self, image, corners, ids):
-        cameraMatrix, distCoeffs = self.K, self.D
-        markerLength = 0.065
+    def camera_to_robot_plane(self, tvec, Rmat):
+        # OpenCV camera frame:
+        # x = right, y = down, z = forward
+        #
+        # Robot/world ground frame:
+        # x = forward, y = left, z = up
 
-        rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
-            corners, markerLength, cameraMatrix, distCoeffs
-        )
+        R_robot_cam = np.array([
+            [0,  0,  1],   # robot x  = camera z
+            [-1, 0,  0],   # robot y  = -camera x
+            [0, -1,  0]    # robot z  = -camera y
+        ])
 
-        #xSum, ySum, angles = 0, 0, []
+        t_cam = tvec.reshape(3, 1)
+        t_robot = R_robot_cam @ t_cam
 
-        lowestDist, angles = 99999999, []
-        selectedX, selectedY = 0,0
-        for i in range(len(ids)):
-            rvec, tvec = rvecs[i], tvecs[i]
-            tag_id = ids[i][0]
+        local_x = t_robot[0, 0]   # forward on movement plane
+        local_y = t_robot[1, 0]   # left/right on movement plane
 
-            cv2.drawFrameAxes(image, cameraMatrix, distCoeffs, rvec, tvec, 0.03)
+        # Marker normal in camera frame
+        marker_normal_cam = Rmat @ np.array([[0], [0], [1]])
 
-            R, _ = cv2.Rodrigues(rvec)
-            yaw = np.arctan2(R[-1,0], R[0,0])
+        # Marker normal in robot frame
+        marker_normal_robot = R_robot_cam @ marker_normal_cam
 
+        # Project normal onto ground plane
+        nx = marker_normal_robot[0, 0]
+        ny = marker_normal_robot[1, 0]
 
-            local_x = tvec[0][2]
-            local_y = -tvec[0][0]
+        observed_yaw = self.normalize(np.arctan2(ny, nx))
 
-
-            world_dx = local_x * np.cos(self.theta) - local_y * np.sin(self.theta)
-            world_dy = local_x * np.sin(self.theta) + local_y * np.cos(self.theta)
-
-            if tag_id not in self.tagMap:
-                tag_theta = self.theta + yaw
-                self.tagMap[tag_id] = np.array([self.x + world_dx, self.y + world_dy, tag_theta])
-                
-                mx, my, t = self.tagMap[tag_id]
-                px = int(500 - my * 100)
-                py = int(500 - mx * 100)
-
-                cv2.circle(self.base_map, (px, py), 15, (255, 0, 0), -1)
-
-
-            # xSum += self.tagMap[tag_id][0] - world_dx
-            # ySum += self.tagMap[tag_id][1] - world_dy
-
-            if (local_x + local_y) < lowestDist:
-                lowestDist = local_x + local_y
-                selectedX = self.tagMap[tag_id][0] - world_dx
-                selectedY = self.tagMap[tag_id][1] - world_dy
-
-                estimatedTheta = self.normalize(self.tagMap[tag_id][2] - yaw)
-                
-
-            
-            # estimatedTheta = self.normalize(self.tagMap[tag_id][2] - yaw)
-            # angles.append(estimatedTheta)
-        # self.x = xSum/len(ids)
-        # self.y = ySum/len(ids)
-
-        angles.append(estimatedTheta)
-
-        xTheta = np.cos(angles).mean()
-        yTheta = np.sin(angles).mean()
-
-        self.theta = np.arctan2(yTheta, xTheta)
-
-        self.x = selectedX - self.camera_offset * np.cos(self.theta)
-        self.y = selectedY - self.camera_offset * np.sin(self.theta)
-
-        return image
+        return local_x, local_y, observed_yaw
 
     def get_observed_tags(self, image, corners, ids):
         cameraMatrix, distCoeffs = self.K, self.D
@@ -269,13 +271,7 @@ class CameraReaderNode(DTROS):
 
             Rmat, _ = cv2.Rodrigues(rvec)
 
-            # SAME yaw logic as your old getPose()
-            observed_yaw = np.arctan2(Rmat[-1, 0], Rmat[0, 0])
-
-            # SAME local position logic as your old getPose()
-            local_x = tvec[0][2]/2
-            local_y = -tvec[0][0]/2
-
+            local_x, local_y, observed_yaw = self.camera_to_robot_plane(tvec, Rmat)
 
             distance = np.sqrt(local_x**2 + local_y**2)
             bearing = np.arctan2(local_y, local_x)
@@ -286,10 +282,10 @@ class CameraReaderNode(DTROS):
             print("OBSERVATIONS:", observations)
 
         return image, observations
-        
+
     def visualizeMarkers(self, image, corners, ids):
         ids = ids.flatten()
-        # loop over the detected ArUCo corners  
+        # loop over the detected ArUCo corners
         for (markerCorner, markerID) in zip(corners, ids):
             corners = markerCorner.reshape((4, 2))
             (topLeft, topRight, bottomRight, bottomLeft) = corners
@@ -298,17 +294,17 @@ class CameraReaderNode(DTROS):
             bottomRight = (int(bottomRight[0]), int(bottomRight[1]))
             bottomLeft = (int(bottomLeft[0]), int(bottomLeft[1]))
             topLeft = (int(topLeft[0]), int(topLeft[1]))
-                       
+
             # draw the bounding box of the ArUCo detection
             cv2.line(image, topLeft, topRight, (0, 255, 0), 2)
             cv2.line(image, topRight, bottomRight, (0, 255, 0), 2)
             cv2.line(image, bottomRight, bottomLeft, (0, 255, 0), 2)
             cv2.line(image, bottomLeft, topLeft, (0, 255, 0), 2)
-            
+
             cX = int((topLeft[0] + bottomRight[0]) / 2.0)
             cY = int((topLeft[1] + bottomRight[1]) / 2.0)
             cv2.circle(image, (cX, cY), 4, (0, 0, 255), -1)
-            
+
             cv2.putText(image, str(markerID),
                 (topLeft[0], topLeft[1] - 15), cv2.FONT_HERSHEY_SIMPLEX,
                 0.5, (0, 255, 0), 2)
@@ -319,7 +315,7 @@ class CameraReaderNode(DTROS):
         if(abs(dL - dR) <= 1e-6):
             x = x + dL * np.cos(theta)
             y = y + dL * np.sin(theta)
-        else:   
+        else:
             wd = (dR - dL)/L
             RR = L * (dL + dR) / (2 * (dR - dL))
 
@@ -331,14 +327,27 @@ class CameraReaderNode(DTROS):
             theta = self.normalize(theta + wd)
 
         return x, y, theta
-    
+
     def updateAllParticlesOdometry(self, dL, dR):
+        # Motion model noise parameters used in the prediction step.
+        # alpha scales noise with motion magnitude (drift error grows
+        # with traveled distance), beta is a small baseline noise that
+        # is always present even when the robot is essentially still.
+        # This is the standard odometry noise model in probabilistic
+        # robotics.
+        alpha = 0.05    # 5% of traveled distance
+        beta = 0.002    # 2 mm constant component
+
         for i in range(len(self.particles)):
             particle = self.particles[i]
             particleX, particleY, particleTheta = particle[0], particle[1], particle[2]
 
-            noisy_dL = dL #+ np.random.normal(0, 0.005)
-            noisy_dR = dR #+ np.random.normal(0, 0.005)
+            # Independent Gaussian noise on each wheel displacement.
+            sigma_L = alpha * abs(dL) + beta
+            sigma_R = alpha * abs(dR) + beta
+
+            noisy_dL = dL + np.random.normal(0, sigma_L)
+            noisy_dR = dR + np.random.normal(0, sigma_R)
 
             x, y, theta = self.updateOdometry(
                 particleX,
@@ -374,7 +383,7 @@ class CameraReaderNode(DTROS):
                 predicted.append([distance, bearing, predicted_yaw])
 
         return predicted
-    
+
     def observation_likelihood(self, real_observations, predicted_observations):
         if len(real_observations) == 0:
             return 1.0
@@ -406,7 +415,7 @@ class CameraReaderNode(DTROS):
             total_weight *= max(best_prob, 1e-9)
 
         return total_weight
-    
+
     def update_particle_weights(self, real_observations):
         weights = []
 
@@ -445,10 +454,9 @@ class CameraReaderNode(DTROS):
 
         return new_particles
 
-
     def effective_sample_size(self):
         return 1.0 / np.sum(self.weights ** 2)
-    
+
     def initializeParticles(self):
         particles = []
 
@@ -499,10 +507,20 @@ class CameraReaderNode(DTROS):
 
         arrow_len_m = 0.03
 
-        # get most probable particle index
-        best_idx = None
+        # Normalize weights for color mapping. The brightest yellow
+        # corresponds to the heaviest particle; lower-weight particles
+        # fade toward darker shades so the weight distribution is visible
+        # at a glance.
         if self.weights is not None and len(self.weights) == len(self.particles):
-            best_idx = np.argmax(self.weights)
+            max_w = np.max(self.weights)
+            if max_w < 1e-12:
+                normalized = np.zeros_like(self.weights)
+            else:
+                normalized = self.weights / max_w
+            best_idx = int(np.argmax(self.weights))
+        else:
+            normalized = np.ones(len(self.particles)) / len(self.particles)
+            best_idx = None
 
         for i, (x, y, theta) in enumerate(self.particles):
 
@@ -516,19 +534,77 @@ class CameraReaderNode(DTROS):
             if 0 <= px < self.map_w and 0 <= py < self.map_h:
 
                 if i == best_idx:
-                    # most probable particle = red and bigger
+                    # Most probable particle: solid red, larger circle and arrow.
                     cv2.circle(canvas, (px, py), 7, (0, 0, 255), -1)
                     cv2.arrowedLine(canvas, (px, py), (ex, ey), (0, 0, 255), 2, tipLength=0.4)
                 else:
-                    # normal particles = yellow
-                    cv2.circle(canvas, (px, py), 2, (0, 255, 255), -1)
-                    cv2.arrowedLine(canvas, (px, py), (ex, ey), (0, 255, 255), 1, tipLength=0.4)
+                    # Normal particles: yellow circle + heading arrow.
+                    # Brightness is scaled by the particle's weight so that
+                    # high-weight clusters appear vivid while low-weight
+                    # outliers fade. The arrow is preserved so the pose
+                    # (heading) of every particle remains visible.
+                    w = float(normalized[i])
+                    color = (
+                        int(40 + 60 * w),       # B: slight blue tint at low weight
+                        int(60 + 195 * w),      # G
+                        int(60 + 195 * w)       # R  -> yellow when bright
+                    )
+                    cv2.circle(canvas, (px, py), 2, color, -1)
+                    cv2.arrowedLine(canvas, (px, py), (ex, ey), color, 1, tipLength=0.4)
 
     def draw_on_map(self):
         self.map_canvas = self.base_map.copy()
+
+        # Drop trajectory points older than TRAJECTORY_TRAIL_SECONDS so
+        # the rendered trails do not accumulate forever. The lists store
+        # tuples of (x, y, timestamp_seconds).
+        now = rospy.Time.now().to_sec()
+        cutoff = now - TRAJECTORY_TRAIL_SECONDS
+
+        # Prune in place (lists stay chronological because we only
+        # append in real time).
+        self.odom_trajectory = [
+            p for p in self.odom_trajectory if p[2] >= cutoff
+        ]
+        self.estimate_trajectory = [
+            p for p in self.estimate_trajectory if p[2] >= cutoff
+        ]
+
+        # Draw odometry-only trajectory in RED.
+        # This is the path the robot would think it took if it trusted
+        # the wheel encoders alone, with no sensor-based correction.
+        # It will drift away from the true path over time.
+        if len(self.odom_trajectory) > 1:
+            for i in range(1, len(self.odom_trajectory)):
+                x1, y1, _ = self.odom_trajectory[i - 1]
+                x2, y2, _ = self.odom_trajectory[i]
+                p1 = self.world_to_pixel(x1, y1)
+                p2 = self.world_to_pixel(x2, y2)
+                cv2.line(self.map_canvas, p1, p2, (0, 0, 255), 2)
+
+        # Draw particle-filter estimate trajectory in GREEN.
+        # This is the weighted mean over all particles, which is the
+        # canonical filter pose estimate as specified by the project.
+        # It should track the true robot pose once the filter
+        # converges to a single cluster.
+        if len(self.estimate_trajectory) > 1:
+            for i in range(1, len(self.estimate_trajectory)):
+                x1, y1, _ = self.estimate_trajectory[i - 1]
+                x2, y2, _ = self.estimate_trajectory[i]
+                p1 = self.world_to_pixel(x1, y1)
+                p2 = self.world_to_pixel(x2, y2)
+                cv2.line(self.map_canvas, p1, p2, (0, 255, 0), 2)
+
         self.draw_particles(self.map_canvas)
+
+        # Legend so the viewer can tell which line is which.
+        cv2.putText(self.map_canvas, "RED   = odometry only",
+                    (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 255), 1)
+        cv2.putText(self.map_canvas, "GREEN = filter estimate (weighted mean)",
+                    (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 1)
+
         cv2.imshow("Top-Down Map", self.map_canvas)
-        
+
     def run(self):
         rate = rospy.Rate(20)
 
@@ -539,7 +615,7 @@ class CameraReaderNode(DTROS):
 
                 if image is None:
                     rospy.logwarn("Failed to convert image from ROS message!")
-                    continue   
+                    continue
 
                 if (self._ticks_left is not None and self._prev_ticks_left is not None and
                     self._ticks_right is not None and self._prev_ticks_right is not None):
@@ -552,8 +628,23 @@ class CameraReaderNode(DTROS):
 
                     self.updateAllParticlesOdometry(dL, dR)
 
+                    # Update the naive odometry-only pose. This pose is
+                    # NEVER corrected by sensor observations; it is the
+                    # baseline we plot in red to show what the robot would
+                    # believe its location was if it trusted the wheel
+                    # encoders alone. Over time it drifts away from the
+                    # true path.
+                    self.odom_x, self.odom_y, self.odom_theta = self.updateOdometry(
+                        self.odom_x, self.odom_y, self.odom_theta, dL, dR
+                    )
+                    # Store the point together with its timestamp so the
+                    # renderer can drop entries older than the trail
+                    # duration.
+                    self.odom_trajectory.append(
+                        (self.odom_x, self.odom_y, rospy.Time.now().to_sec())
+                    )
+
                 corners, ids, _ = self.detectMarkers(image)
-                
 
                 if ids is not None:
                     self.localizationState = True
@@ -561,12 +652,36 @@ class CameraReaderNode(DTROS):
 
                     image = self.visualizeMarkers(image, corners, ids)
                     image, observations = self.get_observed_tags(image, corners, ids)
-                    
+
                     # self.update_particle_weights(observations)
                     # self.particles = self.resample_with_noise(self.particles, self.weights)
                     # self.weights = np.ones(self.particleCount) / self.particleCount
 
                     self.update_particle_weights(observations)
+
+                    # Compute the filter's pose estimate as the WEIGHTED
+                    # MEAN of all particles. The project specifies this
+                    # as the canonical filter pose estimate.
+                    #
+                    # For the orientation we use the circular mean
+                    # (atan2 of weighted sin/cos), because plain
+                    # averaging breaks at the +/- pi wrap-around.
+                    #
+                    # Note: while the filter still has multiple plausible
+                    # clusters, the weighted mean can sit between them
+                    # and look meaningless. This is expected behaviour
+                    # and disappears once the filter collapses to a
+                    # single cluster around the true pose.
+                    est_x = np.sum(self.weights * self.particles[:, 0])
+                    est_y = np.sum(self.weights * self.particles[:, 1])
+                    est_cos = np.sum(self.weights * np.cos(self.particles[:, 2]))
+                    est_sin = np.sum(self.weights * np.sin(self.particles[:, 2]))
+                    est_theta = np.arctan2(est_sin, est_cos)
+                    # Store the point with its timestamp so old segments
+                    # fade out of the rendered trail.
+                    self.estimate_trajectory.append(
+                        (est_x, est_y, rospy.Time.now().to_sec())
+                    )
 
                     best_idx = np.argmax(self.weights)
                     best_particle = self.particles[best_idx]
@@ -615,6 +730,15 @@ class CameraReaderNode(DTROS):
         self._prev_ticks_right = None
         self.latest_image = None
 
+        # Reset the odometry-only baseline back to the manual starting
+        # pose, and clear the visualization buffers so a fresh run does
+        # not inherit stale paths.
+        self.odom_x = ROBOT_INITIAL_X
+        self.odom_y = ROBOT_INITIAL_Y
+        self.odom_theta = ROBOT_INITIAL_THETA
+        self.odom_trajectory = []
+        self.estimate_trajectory = []
+
     def on_shutdown(self):
         rospy.loginfo("Shutting down node...")
         self.reset_state()
@@ -624,9 +748,12 @@ if __name__ == '__main__':
    node = CameraReaderNode(node_name='camera_reader_node')
    node.run()
 
+
+
 """
 RUN CODE:
 
-dts devel run -R chicken -L monte_localizer_package -X 
+dts devel run -R hostname -L monte_localizer_package -X 
 
+dts duckiebot keyboard_control hostname
 """
